@@ -184,6 +184,89 @@ static void handle_room_input(int client_index, const char *input) {
     }
 }
 
+static void handle_item_input(int client_index, const char *input) {
+    Client *client = &clients[client_index];
+    int socket_fd = client->socket_fd;
+
+    if (client->user_index < 0) {
+        client->input_state = INPUT_COMMAND;
+        send_message(socket_fd, "ERROR Not logged in\n");
+        return;
+    }
+
+    if (client->input_state == ADD_ITEM_ROOM_ID) {
+        int room_id = parse_room_id(input);
+        if (room_id < 0) {
+            send_message(socket_fd, "ERROR Invalid room ID\n");
+            send_message(socket_fd, "Room ID:\n");
+            return;
+        }
+        int room_index = find_room_by_id(room_id);
+        if (room_index < 0) {
+            send_message(socket_fd, "ERROR Room not found\n");
+            send_message(socket_fd, "Room ID:\n");
+            return;
+        }
+        if (!is_room_owner(client->user_index, room_index)) {
+            client->input_state = INPUT_COMMAND;
+            send_message(socket_fd, "ERROR Not room owner\n");
+            return;
+        }
+        if (count_room_items(room_id) >= MAX_ITEMS_PER_ROOM) {
+            client->input_state = INPUT_COMMAND;
+            send_message(socket_fd,
+                         "ERROR Item limit reached (maximum 20 items per room)\n");
+            return;
+        }
+        client->pending_room_id = room_id;
+        client->input_state = ADD_ITEM_NAME;
+        send_message(socket_fd, "Item name:\n");
+    }
+    else if (client->input_state == ADD_ITEM_NAME) {
+        if (!valid_auth_input(input, ITEM_NAME_SIZE)) {
+            send_message(socket_fd, "ERROR Item name must be 1-49 characters without whitespace\n");
+            send_message(socket_fd, "Item name:\n");
+            return;
+        }
+        snprintf(client->pending_item_name, sizeof(client->pending_item_name),
+                 "%s", input);
+        client->input_state = ADD_ITEM_START_PRICE;
+        send_message(socket_fd, "Start price:\n");
+    }
+    else if (client->input_state == ADD_ITEM_START_PRICE) {
+        long long start_price = parse_price(input);
+        if (start_price < 0) {
+            send_message(socket_fd, "ERROR Invalid price\n");
+            send_message(socket_fd, "Start price:\n");
+            return;
+        }
+        client->pending_start_price = start_price;
+        client->input_state = ADD_ITEM_BUY_NOW_PRICE;
+        send_message(socket_fd, "Buy now price:\n");
+    }
+    else {
+        long long buy_now_price = parse_price(input);
+        if (buy_now_price < 0) {
+            send_message(socket_fd, "ERROR Invalid price\n");
+            send_message(socket_fd, "Buy now price:\n");
+            return;
+        }
+        if (buy_now_price <= client->pending_start_price) {
+            send_message(socket_fd,
+                         "ERROR Buy-now price must be greater than start price\n");
+            send_message(socket_fd, "Buy now price:\n");
+            return;
+        }
+        client->input_state = INPUT_COMMAND;
+        add_item(client_index, client->pending_room_id,
+                 client->pending_item_name, client->pending_start_price,
+                 buy_now_price);
+        client->pending_room_id = 0;
+        memset(client->pending_item_name, 0, sizeof(client->pending_item_name));
+        client->pending_start_price = 0;
+    }
+}
+
 void handle_command(int client_index, char *command) {
     int socket_fd = clients[client_index].socket_fd;
     char *tokens[5];
@@ -194,6 +277,13 @@ void handle_command(int client_index, char *command) {
     if (clients[client_index].input_state == CREATE_ROOM_NAME ||
         clients[client_index].input_state == JOIN_ROOM_ID) {
         handle_room_input(client_index, command);
+        return;
+    }
+    if (clients[client_index].input_state == ADD_ITEM_ROOM_ID ||
+        clients[client_index].input_state == ADD_ITEM_NAME ||
+        clients[client_index].input_state == ADD_ITEM_START_PRICE ||
+        clients[client_index].input_state == ADD_ITEM_BUY_NOW_PRICE) {
+        handle_item_input(client_index, command);
         return;
     }
     if (clients[client_index].input_state != INPUT_COMMAND) {
@@ -305,6 +395,13 @@ void handle_command(int client_index, char *command) {
     }
     else if (strcmp(tokens[0], "LEAVE_ROOM") == 0 && count == 1) {
         leave_room(client_index);
+    }
+    else if (strcmp(tokens[0], "ADD_ITEM") == 0 && count == 1) {
+        if (!require_login(client_index)) {
+            return;
+        }
+        clients[client_index].input_state = ADD_ITEM_ROOM_ID;
+        send_message(socket_fd, "Room ID:\n");
     }
     else if (strcmp(tokens[0], "ADD_ITEM") == 0 && count == 5) {
         if (!require_login(client_index)) {

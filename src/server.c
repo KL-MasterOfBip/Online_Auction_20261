@@ -73,6 +73,9 @@ static void close_client(int index) {
         clients[index].current_room_id = -1;
         clients[index].input_state = INPUT_COMMAND;
         memset(clients[index].pending_username, 0, sizeof(clients[index].pending_username));
+        clients[index].pending_room_id = 0;
+        memset(clients[index].pending_item_name, 0, sizeof(clients[index].pending_item_name));
+        clients[index].pending_start_price = 0;
     }
 }
 
@@ -90,6 +93,9 @@ int main(void) {
         clients[i].current_room_id = -1;
         clients[i].input_state = INPUT_COMMAND;
         clients[i].pending_username[0] = '\0';
+        clients[i].pending_room_id = 0;
+        clients[i].pending_item_name[0] = '\0';
+        clients[i].pending_start_price = 0;
     }
 
     memset(rooms, 0, sizeof(rooms));
@@ -172,6 +178,9 @@ int main(void) {
                         clients[i].current_room_id = -1;
                         clients[i].input_state = INPUT_COMMAND;
                         clients[i].pending_username[0] = '\0';
+                        clients[i].pending_room_id = 0;
+                        clients[i].pending_item_name[0] = '\0';
+                        clients[i].pending_start_price = 0;
 
                         send_message(client_fd,
                                      "OK Connected to auction server\n");

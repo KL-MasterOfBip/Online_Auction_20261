@@ -31,7 +31,11 @@ typedef enum {
     LOGIN_USERNAME,
     LOGIN_PASSWORD,
     CREATE_ROOM_NAME,
-    JOIN_ROOM_ID
+    JOIN_ROOM_ID,
+    ADD_ITEM_ROOM_ID,
+    ADD_ITEM_NAME,
+    ADD_ITEM_START_PRICE,
+    ADD_ITEM_BUY_NOW_PRICE
 } InputState;
 
 typedef struct {
@@ -42,6 +46,9 @@ typedef struct {
     int current_room_id;  /* -1: client chua tham gia phong nao */
     InputState input_state;
     char pending_username[USERNAME_SIZE];
+    int pending_room_id;
+    char pending_item_name[ITEM_NAME_SIZE];
+    long long pending_start_price;
 } Client;
 
 typedef struct {

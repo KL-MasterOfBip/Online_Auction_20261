@@ -71,7 +71,10 @@ int display_response(char *line) {
     int username_prompt = strcmp(line, "New username:") == 0 ||
                           strcmp(line, "Username:") == 0;
     int room_prompt = strcmp(line, "Room name:") == 0 ||
-                      strcmp(line, "Room ID:") == 0;
+                      strcmp(line, "Room ID:") == 0 ||
+                      strcmp(line, "Item name:") == 0 ||
+                      strcmp(line, "Start price:") == 0 ||
+                      strcmp(line, "Buy now price:") == 0;
     if (password_prompt && hide_password() < 0) {
         perror("Cannot hide password");
         return -1;
