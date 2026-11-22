@@ -64,7 +64,7 @@ typedef struct {
     char room_name[ROOM_NAME_SIZE];
     char owner[USERNAME_SIZE];
     int member_count;
-    int current_item_id;  /* 0: phong chua co vat pham dang dau gia */
+    int current_item_id;  /* 0: khong co vat pham dang dau gia hoac cho NEXT_ITEM */
     int is_active;
 } AuctionRoom;
 
@@ -82,6 +82,8 @@ typedef struct {
     long long buy_now_price;
     long long current_price;
     int highest_bidder;   /* Chi so user, -1: chua co nguoi dat gia */
+    long long next_call_ms;  /* 0: khong hen thong bao */
+    int calls_sent;
     ItemStatus status;
     int is_active;
 } AuctionItem;

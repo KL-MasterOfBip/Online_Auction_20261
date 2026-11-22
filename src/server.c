@@ -14,6 +14,7 @@
 #include "common.h"
 #include "client_handler.h"
 #include "room.h"
+#include "item.h"
 #include "logger.h"
 
 /* Noi cap phat bo nho that cho cac bien dung chung. */
@@ -150,7 +151,14 @@ int main(void) {
             }
         }
 
-        int activity = select(max_fd + 1, &read_fds, NULL, NULL, NULL);
+        long long wait_ms = process_auction_timers();
+        struct timeval timeout;
+        if (wait_ms >= 0) {
+            timeout.tv_sec = wait_ms / 1000;
+            timeout.tv_usec = (wait_ms % 1000) * 1000;
+        }
+        int activity = select(max_fd + 1, &read_fds, NULL, NULL,
+                              wait_ms >= 0 ? &timeout : NULL);
         if (activity < 0) {
             if (errno == EINTR) {
                 continue;
@@ -227,6 +235,8 @@ int main(void) {
                     int should_close = clients[i].input_state == INPUT_COMMAND &&
                         strncmp(line, "QUIT", 4) == 0 &&
                         strspn(line + 4, " \t\r\v\f") == strlen(line + 4);
+                    /* Xu ly moc het han truoc ca khi socket lien tuc co lenh. */
+                    process_auction_timers();
                     handle_command(i, clients[i].buffer);
                     memset(clients[i].buffer, 0, sizeof(clients[i].buffer));
 

@@ -428,7 +428,7 @@ Các chức năng nghiệp vụ của ứng dụng đấu giá sẽ được tri
 - Lưu trữ dữ liệu bền vững, unit test đạt coverage trên 90% và kiểm thử tải.
 
 
-## Đặt giá và thông báo thành viên — mục 9–10
+## Đặt giá và thông báo thành viên — mục 9–11
 
 Chạy `make` tại thư mục project, rồi chạy `./server` và `./client` ở hai terminal.
 Chủ phòng tạo vật phẩm và mở phiên bằng `START_AUCTION <room_id>` như trước.
@@ -463,9 +463,13 @@ ERROR Bid must be at least 120000
   Client terminal hiện tại tự hiển thị các dòng `EVENT` ngay khi nhận được.
 - Ví dụ `BID 1 110000` từ tài khoản `buyer` thành công thì các thành viên khác
   nhận `EVENT BID_PLACED 1 BIDDER buyer PRICE 110000`.
-- Timer, mua ngay và chốt người thắng chưa triển khai.
-  `NEXT_ITEM` bị chặn với `ERROR Cannot skip item with bids` nếu
-  vật phẩm đã có bid, tránh kết thúc sai thành `NO_SALE`; vật phẩm chưa có bid vẫn chuyển như cũ.
+- Sau giá hợp lệ gần nhất, server chờ 3 phút rồi báo `Going once`, thêm 1 phút
+  báo `Going twice`, thêm 1 phút báo `Going three times` và công bố người thắng
+  ở dòng `EVENT ITEM_SOLD` riêng. Các thành viên hiện tại trong phòng, kể cả
+  người đặt giá, nhận các thông báo này.
+- Giá hợp lệ mới đặt lại bộ đếm kể cả sau lần gọi thứ nhất hoặc thứ hai.
+  Vật phẩm đã chốt kết quả sẽ từ chối giá mới và chờ chủ phòng dùng
+  `NEXT_ITEM <room_id>`. Vật phẩm chưa có giá đặt vẫn có thể chuyển thủ công.
 - `LIST_ITEMS` vẫn có định dạng cũ (giá khởi điểm và giá mua ngay), chưa hiển thị giá hiện tại.
 
 Chạy kiểm thử đặt giá: `python3 tests/test_bids.py` (Python chuẩn, GCC, TCP localhost).

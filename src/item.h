@@ -17,4 +17,7 @@ void start_auction(int client_index, int room_id);
 void next_item(int client_index, int room_id);
 void place_bid(int client_index, int item_id, long long price);
 
+/* Xu ly cac moc den han va tra ve so ms toi moc ke tiep (-1 neu khong co). */
+long long process_auction_timers(void);
+
 #endif
