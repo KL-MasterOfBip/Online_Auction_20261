@@ -12,5 +12,6 @@ void add_item(int client_index,
               long long start_price,
               long long buy_now_price);
 void list_items(int client_index, int room_id);
+void remove_item(int client_index, int item_id);
 
 #endif

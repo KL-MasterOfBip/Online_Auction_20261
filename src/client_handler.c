@@ -144,6 +144,10 @@ static int require_login(int client_index) {
     return 1;
 }
 
+static int parse_item_id(const char *input) {
+    return parse_room_id(input);
+}
+
 /* Giu buoc nhap hien tai neu ten phong hoac ID chua hop le. */
 static void handle_room_input(int client_index, const char *input) {
     Client *client = &clients[client_index];
@@ -230,7 +234,7 @@ void handle_command(int client_index, char *command) {
         send_message(socket_fd,
             "OK Commands: HELP, PING, REGISTER, LOGIN, LOGOUT, "
             "CREATE_ROOM, LIST_ROOMS, JOIN_ROOM, LEAVE_ROOM, "
-            "ADD_ITEM, LIST_ITEMS, QUIT\n");
+            "ADD_ITEM, LIST_ITEMS, REMOVE_ITEM, QUIT\n");
     }
     else if (strcmp(tokens[0], "REGISTER") == 0 && count == 3) {
         size_t username_length = strlen(tokens[1]);
@@ -334,6 +338,17 @@ void handle_command(int client_index, char *command) {
         }
         list_items(client_index, room_id);
     }
+    else if (strcmp(tokens[0], "REMOVE_ITEM") == 0 && count == 2) {
+        if (!require_login(client_index)) {
+            return;
+        }
+        int item_id = parse_item_id(tokens[1]);
+        if (item_id < 0) {
+            send_message(socket_fd, "ERROR Invalid item ID\n");
+            return;
+        }
+        remove_item(client_index, item_id);
+    }
     else if (strcmp(tokens[0], "QUIT") == 0 && count == 1) {
         send_message(socket_fd, "OK Goodbye\n");
     }
@@ -348,6 +363,7 @@ void handle_command(int client_index, char *command) {
              strcmp(tokens[0], "LEAVE_ROOM") == 0 ||
              strcmp(tokens[0], "ADD_ITEM") == 0 ||
              strcmp(tokens[0], "LIST_ITEMS") == 0 ||
+             strcmp(tokens[0], "REMOVE_ITEM") == 0 ||
              strcmp(tokens[0], "QUIT") == 0) {
         send_message(socket_fd, "ERROR Invalid command or arguments\n");
     }

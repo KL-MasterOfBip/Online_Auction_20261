@@ -168,3 +168,45 @@ void list_items(int client_index, int room_id) {
 
     send_message(client->socket_fd, "END_ITEM_LIST\n");
 }
+
+void remove_item(int client_index, int item_id) {
+    Client *client = &clients[client_index];
+
+    if (client->user_index < 0) {
+        send_message(client->socket_fd, "ERROR Not logged in\n");
+        return;
+    }
+
+    int item_index = find_item_by_id(item_id);
+    if (item_index < 0) {
+        send_message(client->socket_fd, "ERROR Item not found\n");
+        return;
+    }
+
+    int room_index = find_room_by_id(items[item_index].room_id);
+    if (room_index < 0) {
+        send_message(client->socket_fd, "ERROR Room not found\n");
+        return;
+    }
+
+    if (!is_room_owner(client->user_index, room_index)) {
+        send_message(client->socket_fd, "ERROR Not room owner\n");
+        return;
+    }
+
+    if (items[item_index].status != ITEM_PENDING) {
+        send_message(client->socket_fd,
+                     "ERROR Item already put up for auction\n");
+        return;
+    }
+
+    log_event("ITEM_REMOVED id=%d room_id=%d name=%s owner=%s",
+              items[item_index].item_id, items[item_index].room_id,
+              items[item_index].name, users[client->user_index].username);
+
+    memset(&items[item_index], 0, sizeof(items[item_index]));
+
+    char response[128];
+    snprintf(response, sizeof(response), "OK ITEM_REMOVED ID: %d\n", item_id);
+    send_message(client->socket_fd, response);
+}
