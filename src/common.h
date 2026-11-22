@@ -19,6 +19,11 @@
 #define MAX_ROOMS_PER_USER 10
 #define ROOM_NAME_SIZE 50
 
+#define MAX_ITEMS 500
+#define MAX_ITEMS_PER_ROOM 20
+#define ITEM_NAME_SIZE 50
+#define MAX_PRICE 1000000000000LL
+
 typedef enum {
     INPUT_COMMAND,
     REGISTER_USERNAME,
@@ -54,12 +59,30 @@ typedef struct {
     int is_active;
 } AuctionRoom;
 
+typedef enum {
+    ITEM_PENDING,
+    ITEM_AUCTIONING,
+    ITEM_ENDED
+} ItemStatus;
+
+typedef struct {
+    int item_id;
+    int room_id;
+    char name[ITEM_NAME_SIZE];
+    long long start_price;
+    long long buy_now_price;
+    ItemStatus status;
+    int is_active;
+} AuctionItem;
+
 /* Dinh nghia that cac bien nay nam trong server.c */
 extern Client clients[MAX_CLIENTS];
 extern User users[MAX_USERS];
 extern AuctionRoom rooms[MAX_ROOMS];
+extern AuctionItem items[MAX_ITEMS];
 extern int user_count;
 extern int next_room_id;
+extern int next_item_id;
 
 /* Ham gui du lieu duoc dinh nghia trong server.c */
 int send_all(int socket_fd, const char *data, int length);

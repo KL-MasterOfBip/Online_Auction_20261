@@ -1,11 +1,11 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -std=c11 -g
 TARGET = auction_server
-SERVER_SRC = server.c client_handler.c user.c room.c logger.c
+SERVER_SRC = server.c client_handler.c user.c room.c item.c logger.c
 
 all: $(TARGET) client
 
-$(TARGET): $(SERVER_SRC) common.h client_handler.h user.h room.h logger.h
+$(TARGET): $(SERVER_SRC) common.h client_handler.h user.h room.h item.h logger.h
 	$(CC) $(CFLAGS) $(SERVER_SRC) -o $(TARGET)
 
 client: client.c

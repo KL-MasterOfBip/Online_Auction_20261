@@ -7,6 +7,7 @@
 #include "client_handler.h"
 #include "user.h"
 #include "room.h"
+#include "item.h"
 #include "logger.h"
 
 static int split_tokens(char *command, char *tokens[], int max_tokens) {
@@ -116,6 +117,33 @@ static int parse_room_id(const char *input) {
     return (int)room_id;
 }
 
+static long long parse_price(const char *input) {
+    size_t length = strlen(input);
+
+    if (length == 0 || length > 13) {
+        return -1;
+    }
+    for (size_t i = 0; i < length; i++) {
+        if (!isdigit((unsigned char)input[i])) {
+            return -1;
+        }
+    }
+
+    long long price = strtoll(input, NULL, 10);
+    if (price <= 0 || price > MAX_PRICE) {
+        return -1;
+    }
+    return price;
+}
+
+static int require_login(int client_index) {
+    if (clients[client_index].user_index < 0) {
+        send_message(clients[client_index].socket_fd, "ERROR Not logged in\n");
+        return 0;
+    }
+    return 1;
+}
+
 /* Giu buoc nhap hien tai neu ten phong hoac ID chua hop le. */
 static void handle_room_input(int client_index, const char *input) {
     Client *client = &clients[client_index];
@@ -154,7 +182,7 @@ static void handle_room_input(int client_index, const char *input) {
 
 void handle_command(int client_index, char *command) {
     int socket_fd = clients[client_index].socket_fd;
-    char *tokens[4];
+    char *tokens[5];
     char response[RESPONSE_SIZE];
 
     command[strcspn(command, "\r\n")] = '\0';
@@ -169,7 +197,7 @@ void handle_command(int client_index, char *command) {
         return;
     }
 
-    int count = split_tokens(command, tokens, 4);
+    int count = split_tokens(command, tokens, 5);
 
     if (count == 0) {
         send_message(socket_fd, "ERROR Empty command\n");
@@ -201,7 +229,8 @@ void handle_command(int client_index, char *command) {
     else if (strcmp(tokens[0], "HELP") == 0 && count == 1) {
         send_message(socket_fd,
             "OK Commands: HELP, PING, REGISTER, LOGIN, LOGOUT, "
-            "CREATE_ROOM, LIST_ROOMS, JOIN_ROOM, LEAVE_ROOM, QUIT\n");
+            "CREATE_ROOM, LIST_ROOMS, JOIN_ROOM, LEAVE_ROOM, "
+            "ADD_ITEM, LIST_ITEMS, QUIT\n");
     }
     else if (strcmp(tokens[0], "REGISTER") == 0 && count == 3) {
         size_t username_length = strlen(tokens[1]);
@@ -273,6 +302,38 @@ void handle_command(int client_index, char *command) {
     else if (strcmp(tokens[0], "LEAVE_ROOM") == 0 && count == 1) {
         leave_room(client_index);
     }
+    else if (strcmp(tokens[0], "ADD_ITEM") == 0 && count == 5) {
+        if (!require_login(client_index)) {
+            return;
+        }
+        int room_id = parse_room_id(tokens[1]);
+        if (room_id < 0) {
+            send_message(socket_fd, "ERROR Invalid room ID\n");
+            return;
+        }
+        if (strlen(tokens[2]) >= ITEM_NAME_SIZE) {
+            send_message(socket_fd, "ERROR Item name is too long\n");
+            return;
+        }
+        long long start_price = parse_price(tokens[3]);
+        long long buy_now_price = parse_price(tokens[4]);
+        if (start_price < 0 || buy_now_price < 0) {
+            send_message(socket_fd, "ERROR Invalid price\n");
+            return;
+        }
+        add_item(client_index, room_id, tokens[2], start_price, buy_now_price);
+    }
+    else if (strcmp(tokens[0], "LIST_ITEMS") == 0 && count == 2) {
+        if (!require_login(client_index)) {
+            return;
+        }
+        int room_id = parse_room_id(tokens[1]);
+        if (room_id < 0) {
+            send_message(socket_fd, "ERROR Invalid room ID\n");
+            return;
+        }
+        list_items(client_index, room_id);
+    }
     else if (strcmp(tokens[0], "QUIT") == 0 && count == 1) {
         send_message(socket_fd, "OK Goodbye\n");
     }
@@ -285,6 +346,8 @@ void handle_command(int client_index, char *command) {
              strcmp(tokens[0], "LIST_ROOMS") == 0 ||
              strcmp(tokens[0], "JOIN_ROOM") == 0 ||
              strcmp(tokens[0], "LEAVE_ROOM") == 0 ||
+             strcmp(tokens[0], "ADD_ITEM") == 0 ||
+             strcmp(tokens[0], "LIST_ITEMS") == 0 ||
              strcmp(tokens[0], "QUIT") == 0) {
         send_message(socket_fd, "ERROR Invalid command or arguments\n");
     }

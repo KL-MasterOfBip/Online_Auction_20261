@@ -20,8 +20,10 @@
 Client clients[MAX_CLIENTS];
 User users[MAX_USERS];
 AuctionRoom rooms[MAX_ROOMS];
+AuctionItem items[MAX_ITEMS];
 int user_count = 0;
 int next_room_id = 1;
+int next_item_id = 1;
 
 int send_all(int socket_fd, const char *data, int length) {
     int total = 0;
@@ -91,6 +93,7 @@ int main(void) {
     }
 
     memset(rooms, 0, sizeof(rooms));
+    memset(items, 0, sizeof(items));
 
     server_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (server_fd < 0) {

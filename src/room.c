@@ -54,6 +54,10 @@ int count_owned_rooms(int user_index) {
     return count;
 }
 
+int is_room_owner(int user_index, int room_index) {
+    return strcmp(rooms[room_index].owner, users[user_index].username) == 0;
+}
+
 void create_room(int client_index, const char *room_name) {
     Client *client = &clients[client_index];
 
