@@ -4,7 +4,7 @@
 
 ## Trạng thái hiện tại
 
-Dự án đã hoàn thành phần nền tảng TCP Server, xử lý giao thức lệnh theo dòng (Commit 2), quản lý tài khoản, phiên đăng nhập (Commit 3) quản lý phòng đấu giá (Commit 4) và ghi nhật ký hoạt động cùng bộ kiểm thử tự động (Commit 5).
+Dự án đã hoàn thành phần nền tảng TCP Server, xử lý giao thức lệnh theo dòng (Commit 2), quản lý tài khoản, phiên đăng nhập (Commit 3) quản lý phòng đấu giá (Commit 4) và ghi nhật ký hoạt động cùng bộ kiểm thử tự động (Commit 5). Ở Tuần 2, đã bổ sung mô hình vật phẩm đấu giá cùng hai lệnh `ADD_ITEM` và `LIST_ITEMS` (Commit 1).
 
 ### Commit 1 – TCP Server nền tảng
 
@@ -68,6 +68,32 @@ Ví dụ nội dung file log (thời gian chỉ minh họa định dạng):
 [2026-11-15 10:20:55] ROOM_JOIN username=khanh fd=4 room_id=1 members=1
 ```
 
+### Tuần 2 – Commit 1: Auction Item Model, ADD_ITEM & LIST_ITEMS
+
+- Thêm mô hình dữ liệu vật phẩm đấu giá:
+  - Các hằng giới hạn `MAX_ITEMS`, `MAX_ITEMS_PER_ROOM`, `ITEM_NAME_SIZE` và `MAX_PRICE`.
+  - Enum `ItemStatus` và struct `AuctionItem`.
+  - Biến dùng chung `items` và `next_item_id`.
+- Tạo `item.h` và `item.c`, triển khai các hàm:
+  - `find_item_by_id`: tìm vật phẩm theo ID.
+  - `item_status_name`: lấy tên trạng thái vật phẩm.
+  - `count_room_items`: đếm số vật phẩm trong phòng.
+  - `add_item`: thêm vật phẩm.
+  - `list_items`: liệt kê vật phẩm.
+- Bổ sung `is_room_owner` trong `room.h` và `room.c` để kiểm tra chủ sở hữu phòng.
+- Khởi tạo dữ liệu vật phẩm trong `server.c`.
+- Tích hợp xử lý `ADD_ITEM` và `LIST_ITEMS` trong `client_handler.c`; bổ sung kiểm tra đăng nhập, phân tích giá và cập nhật nội dung `HELP`.
+- Cập nhật `Makefile` để biên dịch thêm `item.c` và theo dõi `item.h`.
+- Bổ sung kiểm thử:
+  - `tests/item_test_base.py`: phần dùng chung cho các bài test vật phẩm.
+  - `tests/test_items_add.py`: 28 test cho chức năng thêm và liệt kê vật phẩm.
+
+Chạy các bài kiểm thử thuộc nhóm vật phẩm:
+
+```bash
+python3 -m unittest discover -s tests -p "test_items_*.py"
+```
+
 ### Các lệnh hiện có
 
 | Lệnh | Chức năng | Phản hồi thành công |
@@ -81,6 +107,8 @@ Ví dụ nội dung file log (thời gian chỉ minh họa định dạng):
 | `LIST_ROOMS` | Liệt kê các phòng | Danh sách phòng, kết thúc bằng `END_ROOM_LIST` |
 | `JOIN_ROOM` / `JOIN_ROOM <room_id>` | Tham gia phòng | `OK JOINED_ROOM <ten_phong>` |
 | `LEAVE_ROOM` | Rời phòng hiện tại | `OK LEFT_ROOM` |
+| `ADD_ITEM` | Thêm vật phẩm vào phòng đấu giá | Theo phản hồi của server |
+| `LIST_ITEMS` | Liệt kê vật phẩm | Danh sách vật phẩm theo phản hồi của server |
 | `QUIT` | Kết thúc phiên làm việc | `OK Goodbye` |
 
 ### Các phản hồi lỗi
@@ -385,7 +413,7 @@ Chi tiết nằm trong `TEST_COMMIT_5.md`.
 - Chưa có lệnh xóa phòng.
 - Chưa giới hạn số người trong một phòng.
 - Người tạo phòng chưa tự động trở thành thành viên của phòng.
-- Chưa có vật phẩm, đặt giá và mua ngay.
+- Đã có chức năng thêm và liệt kê vật phẩm; chưa có chức năng rút vật phẩm, đặt giá và mua ngay.
 - Chưa có unit test đo độ phủ (coverage) và chưa có kiểm thử tải; bộ test hiện tại là kiểm thử tích hợp.
 - Logger mở file theo từng sự kiện, phù hợp quy mô bài tập, chưa phải hệ thống logging tải cao.
 - Server xử lý một luồng trong vòng lặp `select()`; nếu chuyển sang đa luồng cần đồng bộ dữ liệu dùng chung.
@@ -394,7 +422,7 @@ Chi tiết nằm trong `TEST_COMMIT_5.md`.
 
 Các chức năng nghiệp vụ của ứng dụng đấu giá sẽ được triển khai trong những commit tiếp theo, bao gồm:
 
-- Quản lý vật phẩm đấu giá (tạo, liệt kê, rút vật phẩm chưa mở phiên).
+- Hoàn thiện quản lý vật phẩm đấu giá (rút vật phẩm chưa mở phiên và các bước quản lý tiếp theo).
 - Đặt giá và cập nhật trạng thái phiên đấu giá.
 - Mua ngay và bộ đếm 3 phút kèm thông báo.
 - Lưu trữ dữ liệu bền vững, unit test đạt coverage trên 90% và kiểm thử tải.
