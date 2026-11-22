@@ -284,3 +284,69 @@ void start_auction(int client_index, int room_id) {
     snprintf(message, sizeof(message), "EVENT ITEM_STARTED %s\n", info);
     broadcast_to_room(room_id, message, client_index);
 }
+
+void next_item(int client_index, int room_id) {
+    Client *client = &clients[client_index];
+
+    if (client->user_index < 0) {
+        send_message(client->socket_fd, "ERROR Not logged in\n");
+        return;
+    }
+
+    int room_index = find_room_by_id(room_id);
+    if (room_index < 0) {
+        send_message(client->socket_fd, "ERROR Room not found\n");
+        return;
+    }
+
+    if (!is_room_owner(client->user_index, room_index)) {
+        send_message(client->socket_fd, "ERROR Not room owner\n");
+        return;
+    }
+
+    int current_index = -1;
+    if (rooms[room_index].current_item_id != 0) {
+        current_index = find_item_by_id(rooms[room_index].current_item_id);
+    }
+
+    if (current_index < 0) {
+        rooms[room_index].current_item_id = 0;
+        send_message(client->socket_fd, "ERROR No item is being auctioned\n");
+        return;
+    }
+
+    char message[256];
+
+    items[current_index].status = ITEM_ENDED;
+    rooms[room_index].current_item_id = 0;
+
+    log_event("AUCTION_ITEM_ENDED room_id=%d item_id=%d name=%s result=NO_SALE",
+              room_id, items[current_index].item_id, items[current_index].name);
+
+    snprintf(message, sizeof(message), "OK ITEM_ENDED %d %s\n",
+             items[current_index].item_id, items[current_index].name);
+    send_message(client->socket_fd, message);
+
+    snprintf(message, sizeof(message), "EVENT ITEM_ENDED %d %s NO_SALE\n",
+             items[current_index].item_id, items[current_index].name);
+    broadcast_to_room(room_id, message, client_index);
+
+    int next_index = find_first_pending_item(room_id);
+    if (next_index < 0) {
+        log_event("AUCTION_FINISHED room_id=%d", room_id);
+        send_message(client->socket_fd, "OK AUCTION_FINISHED\n");
+        broadcast_to_room(room_id, "EVENT AUCTION_FINISHED\n", client_index);
+        return;
+    }
+
+    begin_item(room_index, next_index);
+
+    char info[192];
+    describe_item(&items[next_index], info, sizeof(info));
+
+    snprintf(message, sizeof(message), "OK ITEM_STARTED %s\n", info);
+    send_message(client->socket_fd, message);
+
+    snprintf(message, sizeof(message), "EVENT ITEM_STARTED %s\n", info);
+    broadcast_to_room(room_id, message, client_index);
+}
