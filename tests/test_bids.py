@@ -1,4 +1,4 @@
-"""TCP integration tests for requirement 9 (no bid broadcast or timer)."""
+"""TCP integration tests for requirements 9 and 10 (bidding and room broadcasts)."""
 from pathlib import Path
 import sys
 import unittest
@@ -107,10 +107,23 @@ class BidTests(base.ServerTestCase):
         other.read_line()
         self.buyer.send(f'BID {self.item} 110000')
         other.send(f'BID {self.item} 110000')
-        responses = [self.buyer.read_line(), other.read_line()]
+        responses = []
+        events = []
+        for client in (self.buyer, other):
+            line = client.read_line()
+            if line.startswith('EVENT '):
+                events.append(line)
+                line = client.read_line()
+            responses.append(line)
+            if line.startswith('ERROR ') and not events:
+                events.append(client.read_line())
         self.assertCountEqual(responses, [f'OK BID_ACCEPTED {self.item} PRICE 110000',
                                           'ERROR Bid must be at least 120000'])
+        winner = 'buyer' if responses[0].startswith('OK ') else 'other'
+        self.assertEqual(events, [f'EVENT BID_PLACED {self.item} BIDDER {winner} PRICE 110000'])
         self.accepted(120000, other)
+        self.assertEqual(self.buyer.read_line(),
+                         f'EVENT BID_PLACED {self.item} BIDDER other PRICE 120000')
         self.assertEqual(self.bid(120000), 'ERROR Bid must be at least 130000')
 
     def test_different_rooms_have_independent_prices(self):
@@ -126,7 +139,7 @@ class BidTests(base.ServerTestCase):
         self.accepted(210000, other, item2)
         self.accepted(120000)
 
-    def test_framing_no_broadcast_and_logging(self):
+    def test_framing_non_member_owner_and_logging(self):
         self.start()
         self.buyer.send_raw(f'BID {self.item} 110'.encode())
         self.buyer.send_raw(f'000\nBID {self.item} 120000\n'.encode())
@@ -148,6 +161,72 @@ class BidTests(base.ServerTestCase):
         self.assertEqual(self.bid(110000, again), 'ERROR Bid must be at least 120000')
         self.accepted(120000, again)
         self.assertEqual(self.owner.cmd(f'NEXT_ITEM {self.room}'), 'ERROR Cannot skip item with bids')
+
+
+    def event(self, name, price):
+        return f'EVENT BID_PLACED {self.item} BIDDER {name} PRICE {price}'
+
+    def test_all_current_members_receive_events_without_sender_duplicate(self):
+        self.start()
+        viewers = [self.make_user('viewer' + str(i)) for i in range(5)]
+        for viewer in viewers:
+            viewer.cmd(f'JOIN_ROOM {self.room}')
+        self.owner.cmd(f'JOIN_ROOM {self.room}')
+        self.accepted(110000)
+        for viewer in viewers + [self.owner]:
+            self.assertEqual(viewer.read_line(), self.event('buyer', 110000))
+            self.assertFalse(viewer.has_data(.03))
+        self.assertFalse(self.buyer.has_data(.03))
+        self.accepted(120000, viewers[0])
+        for viewer in viewers[1:] + [self.owner, self.buyer]:
+            self.assertEqual(viewer.read_line(), self.event('viewer0', 120000))
+        self.assertFalse(viewers[0].has_data(.03))
+
+    def test_other_rooms_guests_leavers_and_logout_do_not_receive(self):
+        self.start()
+        guest = self.connect()
+        room2 = self.make_room(self.owner, 'Other')
+        outsider = self.make_user('outsider')
+        outsider.cmd(f'JOIN_ROOM {room2}')
+        left = self.make_user('left')
+        left.cmd(f'JOIN_ROOM {self.room}')
+        left.cmd('LEAVE_ROOM')
+        logged_out = self.make_user('logged_out')
+        logged_out.cmd(f'JOIN_ROOM {self.room}')
+        logged_out.cmd('LOGOUT')
+        self.accepted(110000)
+        for client in (guest, outsider, left, logged_out, self.owner):
+            self.assertFalse(client.has_data(.05))
+        left.cmd(f'JOIN_ROOM {self.room}')
+        self.assertFalse(left.has_data(.03))
+        self.accepted(120000)
+        self.assertEqual(left.read_line(), self.event('buyer', 120000))
+
+    def test_rejected_bids_do_not_broadcast_or_change_price(self):
+        self.start()
+        viewer = self.make_user('viewer')
+        viewer.cmd(f'JOIN_ROOM {self.room}')
+        self.assertEqual(self.bid(109999), 'ERROR Bid must be at least 110000')
+        self.assertEqual(self.bid('abc'), 'ERROR Invalid price')
+        self.assertFalse(viewer.has_data(.05))
+        self.accepted(110000)
+        self.assertEqual(viewer.read_line(), self.event('buyer', 110000))
+        self.assertEqual(self.bid(110000), 'ERROR Bid must be at least 120000')
+        self.assertFalse(viewer.has_data(.05))
+
+    def test_events_order_after_multiple_commands_and_disconnected_member(self):
+        self.start()
+        viewer = self.make_user('viewer')
+        viewer.cmd(f'JOIN_ROOM {self.room}')
+        gone = self.make_user('gone')
+        gone.cmd(f'JOIN_ROOM {self.room}')
+        gone.close()
+        self.buyer.send_raw(f'BID {self.item} 110000\nBID {self.item} 120000\n'.encode())
+        for price in (110000, 120000):
+            self.assertEqual(self.buyer.read_line(), f'OK BID_ACCEPTED {self.item} PRICE {price}')
+            self.assertEqual(viewer.read_line(), self.event('buyer', price))
+        self.assertEqual(viewer.cmd('PING'), 'OK PONG')
+
 
 
 if __name__ == '__main__':

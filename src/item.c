@@ -414,4 +414,10 @@ void place_bid(int client_index, int item_id, long long price) {
     char response[128];
     snprintf(response, sizeof(response), "OK BID_ACCEPTED %d PRICE %lld\n", item_id, price);
     send_message(socket_fd, response);
+
+    /* Gia da duoc cap nhat; cac thanh vien khac nhan cung mot su kien. */
+    char event[192];
+    snprintf(event, sizeof(event), "EVENT BID_PLACED %d BIDDER %s PRICE %lld\n",
+             item_id, users[client->user_index].username, item->current_price);
+    broadcast_to_room(item->room_id, event, client_index);
 }

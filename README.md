@@ -428,7 +428,7 @@ Các chức năng nghiệp vụ của ứng dụng đấu giá sẽ được tri
 - Lưu trữ dữ liệu bền vững, unit test đạt coverage trên 90% và kiểm thử tải.
 
 
-## Đặt giá — mục 9
+## Đặt giá và thông báo thành viên — mục 9–10
 
 Chạy `make` tại thư mục project, rồi chạy `./server` và `./client` ở hai terminal.
 Chủ phòng tạo vật phẩm và mở phiên bằng `START_AUCTION <room_id>` như trước.
@@ -455,8 +455,16 @@ ERROR Bid must be at least 120000
   Chủ phòng không được tự trả giá. ID vật phẩm được kiểm tra để tránh đặt nhầm khi chuyển phiên.
 - Giá hợp lệ cập nhật giá hiện tại và tài khoản đang dẫn đầu trong RAM, ghi log
   `BID_ACCEPTED`; giá bị từ chối không làm thay đổi trạng thái.
-- Phản hồi chỉ gửi cho người đặt. Broadcast giá, timer, mua ngay và chốt người thắng
-  chưa triển khai. `NEXT_ITEM` bị chặn với `ERROR Cannot skip item with bids` nếu
+- Người đặt nhận `OK BID_ACCEPTED`; các thành viên khác trong phòng nhận
+  `EVENT BID_PLACED <item_id> BIDDER <username> PRICE <price>` sau khi server
+  cập nhật giá. Không gửi lặp sự kiện cho người đặt. Giá bị từ chối không phát sự kiện.
+- Người khác phòng, guest, người đã rời phòng hoặc logout không nhận thông báo.
+  Chủ phòng cần `JOIN_ROOM` nếu muốn nhận sự kiện; tạo phòng chưa tự tham gia phòng.
+  Client terminal hiện tại tự hiển thị các dòng `EVENT` ngay khi nhận được.
+- Ví dụ `BID 1 110000` từ tài khoản `buyer` thành công thì các thành viên khác
+  nhận `EVENT BID_PLACED 1 BIDDER buyer PRICE 110000`.
+- Timer, mua ngay và chốt người thắng chưa triển khai.
+  `NEXT_ITEM` bị chặn với `ERROR Cannot skip item with bids` nếu
   vật phẩm đã có bid, tránh kết thúc sai thành `NO_SALE`; vật phẩm chưa có bid vẫn chuyển như cũ.
 - `LIST_ITEMS` vẫn có định dạng cũ (giá khởi điểm và giá mua ngay), chưa hiển thị giá hiện tại.
 
