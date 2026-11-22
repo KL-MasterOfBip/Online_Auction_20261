@@ -36,7 +36,8 @@ typedef enum {
     ADD_ITEM_ROOM_ID,
     ADD_ITEM_NAME,
     ADD_ITEM_START_PRICE,
-    ADD_ITEM_BUY_NOW_PRICE
+    ADD_ITEM_BUY_NOW_PRICE,
+    STOP_AUCTION_CONFIRM
 } InputState;
 
 typedef struct {
@@ -48,6 +49,7 @@ typedef struct {
     InputState input_state;
     char pending_username[USERNAME_SIZE];
     int pending_room_id;
+    int pending_stop_item_id;
     char pending_item_name[ITEM_NAME_SIZE];
     long long pending_start_price;
 } Client;
@@ -82,7 +84,7 @@ typedef struct {
     long long buy_now_price;
     long long current_price;
     int highest_bidder;   /* Chi so user dan dau hoac da mua, -1: chua co */
-    long long next_call_ms;  /* 0: khong hen thong bao */
+    long long deadline_ms;  /* 0: khong co moc xu ly tu dong */
     int calls_sent;
     ItemStatus status;
     int is_active;

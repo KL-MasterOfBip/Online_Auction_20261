@@ -493,3 +493,20 @@ nhận `EVENT ITEM_SOLD 1 buyer bought it now for 500000 VND.` Chủ phòng khô
 mua vật phẩm của mình. Thành viên có thể mua vật phẩm đang chờ hoặc đang đấu giá.
 Mua một vật phẩm đang chờ không ảnh hưởng phiên của vật phẩm khác. Nếu mua vật
 phẩm đang đấu giá, server dừng bộ đếm và chờ chủ phòng dùng `NEXT_ITEM <room_id>`.
+
+
+## Dừng phiên đấu giá
+
+Chủ phòng nhập `STOP_AUCTION <room_id>` rồi trả lời `y` để dừng hoặc `n` để tiếp tục.
+Nếu chỉ điều hành một phòng có phiên đang chạy, có thể nhập `STOP_AUCTION`.
+Lệnh dùng được khi đang đấu giá hoặc sau khi bán xong và đang chờ `NEXT_ITEM`.
+
+Server cũng dừng phiên nếu vật phẩm đã mở 5 phút mà chưa có giá hợp lệ (`NO_BIDS`),
+hoặc đã bán 5 phút mà chủ phòng chưa chuyển vật phẩm (`NEXT_ITEM_TIMEOUT`).
+Giá hợp lệ đầu tiên chuyển sang bộ đếm gọi giá 3–4–5 phút như trước.
+Server phát `EVENT AUCTION_STOPPED <room_id> REASON <reason>` cho phòng.
+
+Nếu dừng khi vật phẩm chưa bán, server đưa vật phẩm về `PENDING`, giữ nguyên ID,
+tên, giá khởi điểm và giá mua ngay. Các bid của lượt đã dừng được đặt lại. Chủ
+phòng dùng `START_AUCTION <room_id>` để mở lại vật phẩm đó. Vật phẩm đã bán giữ
+nguyên kết quả.

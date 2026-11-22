@@ -274,6 +274,11 @@ void handle_command(int client_index, char *command) {
 
     command[strcspn(command, "\r\n")] = '\0';
 
+    if (clients[client_index].input_state == STOP_AUCTION_CONFIRM) {
+        int count = split_tokens(command, tokens, 5);
+        confirm_stop_auction(client_index, count == 1 ? tokens[0] : "");
+        return;
+    }
     if (clients[client_index].input_state == CREATE_ROOM_NAME ||
         clients[client_index].input_state == JOIN_ROOM_ID) {
         handle_room_input(client_index, command);
@@ -324,7 +329,7 @@ void handle_command(int client_index, char *command) {
         send_message(socket_fd,
             "OK Commands: HELP, PING, REGISTER, LOGIN, LOGOUT, "
             "CREATE_ROOM, LIST_ROOMS, JOIN_ROOM, LEAVE_ROOM, "
-            "ADD_ITEM, LIST_ITEMS, REMOVE_ITEM, START_AUCTION, NEXT_ITEM, BID, BUY_NOW, QUIT\n");
+            "ADD_ITEM, LIST_ITEMS, REMOVE_ITEM, START_AUCTION, NEXT_ITEM, STOP_AUCTION, BID, BUY_NOW, QUIT\n");
     }
     else if (strcmp(tokens[0], "REGISTER") == 0 && count == 3) {
         size_t username_length = strlen(tokens[1]);
@@ -468,6 +473,20 @@ void handle_command(int client_index, char *command) {
         }
         next_item(client_index, room_id);
     }
+    else if (strcmp(tokens[0], "STOP_AUCTION") == 0 && (count == 1 || count == 2)) {
+        if (!require_login(client_index)) {
+            return;
+        }
+        int room_id = 0;
+        if (count == 2) {
+            room_id = parse_room_id(tokens[1]);
+            if (room_id < 0) {
+                send_message(socket_fd, "ERROR Invalid room ID\n");
+                return;
+            }
+        }
+        request_stop_auction(client_index, room_id);
+    }
     else if (strcmp(tokens[0], "BID") == 0 && count == 3) {
         if (!require_login(client_index)) {
             return;
@@ -512,6 +531,7 @@ void handle_command(int client_index, char *command) {
              strcmp(tokens[0], "REMOVE_ITEM") == 0 ||
              strcmp(tokens[0], "START_AUCTION") == 0 ||
              strcmp(tokens[0], "NEXT_ITEM") == 0 ||
+             strcmp(tokens[0], "STOP_AUCTION") == 0 ||
              strcmp(tokens[0], "BID") == 0 ||
              strcmp(tokens[0], "BUY_NOW") == 0 ||
              strcmp(tokens[0], "QUIT") == 0) {

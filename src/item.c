@@ -13,6 +13,11 @@
 #ifndef BID_CALL_INTERVAL_MS
 #define BID_CALL_INTERVAL_MS 60000LL
 #endif
+#ifndef AUCTION_STOP_MS
+#define AUCTION_STOP_MS 300000LL
+#endif
+
+#define STOP_AUCTION_PROMPT "Stop auction? (y/n):\n"
 
 static long long monotonic_ms(void) {
     struct timespec now;
@@ -93,6 +98,8 @@ static void describe_item(const AuctionItem *item, char *output, size_t size) {
 }
 
 static void begin_item(int room_index, int item_index) {
+    long long now = monotonic_ms();
+    items[item_index].deadline_ms = now < 0 ? 0 : now + AUCTION_STOP_MS;
     items[item_index].status = ITEM_AUCTIONING;
     rooms[room_index].current_item_id = items[item_index].item_id;
 
@@ -163,7 +170,7 @@ void add_item(int client_index,
     item->buy_now_price = buy_now_price;
     item->current_price = start_price;
     item->highest_bidder = -1;
-    item->next_call_ms = 0;
+    item->deadline_ms = 0;
     item->calls_sent = 0;
     item->status = ITEM_PENDING;
     item->is_active = 1;
@@ -343,6 +350,7 @@ void next_item(int client_index, int room_id) {
     }
 
     char message[256];
+    current->deadline_ms = 0;
     rooms[room_index].current_item_id = 0;
     snprintf(message, sizeof(message), "OK ITEM_ENDED %d %s\n",
              current->item_id, current->name);
@@ -376,6 +384,107 @@ void next_item(int client_index, int room_id) {
 
     snprintf(message, sizeof(message), "EVENT ITEM_STARTED %s\n", info);
     broadcast_to_room(room_id, message, client_index);
+}
+
+/* Dua vat pham chua ban ve hang cho de co the mo lai. */
+static void stop_auction(int room_index, AuctionItem *item, int requester,
+                         const char *reason) {
+    AuctionRoom *room = &rooms[room_index];
+    if (item->status == ITEM_AUCTIONING) {
+        item->status = ITEM_PENDING;
+        item->highest_bidder = -1;
+        item->current_price = item->start_price;
+        log_event("AUCTION_ITEM_REQUEUED room_id=%d item_id=%d name=%s reason=%s",
+                  room->room_id, item->item_id, item->name, reason);
+    }
+    item->deadline_ms = 0;
+    item->calls_sent = 0;
+    room->current_item_id = 0;
+    log_event("AUCTION_STOPPED room_id=%d item_id=%d reason=%s",
+              room->room_id, item->item_id, reason);
+
+    char message[128];
+    if (requester >= 0) {
+        snprintf(message, sizeof(message), "OK AUCTION_STOPPED %d\n", room->room_id);
+        send_message(clients[requester].socket_fd, message);
+    }
+    snprintf(message, sizeof(message), "EVENT AUCTION_STOPPED %d REASON %s\n",
+             room->room_id, reason);
+    broadcast_to_room(room->room_id, message, requester);
+
+    /* Chu phong co the dieu hanh phien ma khong tham gia phong. */
+    if (requester < 0) {
+        for (int i = 0; i < MAX_CLIENTS; i++) {
+            if (clients[i].socket_fd >= 0 && clients[i].user_index >= 0 &&
+                clients[i].current_room_id != room->room_id &&
+                is_room_owner(clients[i].user_index, room_index)) {
+                send_message(clients[i].socket_fd, message);
+                break;
+            }
+        }
+    }
+}
+
+void request_stop_auction(int client_index, int room_id) {
+    Client *client = &clients[client_index];
+    int room_index = -1;
+    if (room_id == 0) {
+        for (int i = 0; i < MAX_ROOMS; i++) {
+            if (rooms[i].is_active && rooms[i].current_item_id != 0 &&
+                is_room_owner(client->user_index, i)) {
+                if (room_index >= 0) {
+                    send_message(client->socket_fd, "ERROR Specify room ID: STOP_AUCTION <room_id>\n");
+                    return;
+                }
+                room_index = i;
+            }
+        }
+    }
+    else {
+        room_index = find_room_by_id(room_id);
+        if (room_index < 0) {
+            send_message(client->socket_fd, "ERROR Room not found\n");
+            return;
+        }
+        if (!is_room_owner(client->user_index, room_index)) {
+            send_message(client->socket_fd, "ERROR Not room owner\n");
+            return;
+        }
+    }
+    if (room_index < 0 || rooms[room_index].current_item_id == 0) {
+        send_message(client->socket_fd, "ERROR No auction is running\n");
+        return;
+    }
+
+    client->pending_stop_item_id = rooms[room_index].current_item_id;
+    client->input_state = STOP_AUCTION_CONFIRM;
+    send_message(client->socket_fd, STOP_AUCTION_PROMPT);
+}
+
+void confirm_stop_auction(int client_index, const char *answer) {
+    Client *client = &clients[client_index];
+    int yes = strcmp(answer, "y") == 0 || strcmp(answer, "Y") == 0;
+    int no = strcmp(answer, "n") == 0 || strcmp(answer, "N") == 0;
+    if (!yes && !no) {
+        send_message(client->socket_fd, "ERROR Enter y or n\n");
+        send_message(client->socket_fd, STOP_AUCTION_PROMPT);
+        return;
+    }
+
+    int item_id = client->pending_stop_item_id;
+    client->pending_stop_item_id = 0;
+    client->input_state = INPUT_COMMAND;
+    if (no) {
+        send_message(client->socket_fd, "OK STOP_AUCTION_CANCELLED\n");
+        return;
+    }
+    int item_index = find_item_by_id(item_id);
+    int room_index = item_index < 0 ? -1 : find_room_by_id(items[item_index].room_id);
+    if (room_index < 0 || rooms[room_index].current_item_id != item_id) {
+        send_message(client->socket_fd, "ERROR Auction is no longer running\n");
+        return;
+    }
+    stop_auction(room_index, &items[item_index], client_index, "SELLER_STOPPED");
 }
 
 /* Ca dat gia va mua ngay deu yeu cau nguoi mua o trong phong cua vat pham. */
@@ -414,8 +523,10 @@ static void complete_buy_now(int client_index, AuctionItem *item) {
     /* Chot giao dich truoc khi gui phan hoi va huy cac lan goi gia con lai. */
     item->current_price = item->buy_now_price;
     item->highest_bidder = client->user_index;
+    long long now = monotonic_ms();
+    item->deadline_ms = item->status == ITEM_AUCTIONING && now >= 0
+                        ? now + AUCTION_STOP_MS : 0;
     item->status = ITEM_ENDED;
-    item->next_call_ms = 0;
     item->calls_sent = 0;
     const char *buyer = users[client->user_index].username;
     log_event("AUCTION_ITEM_ENDED room_id=%d item_id=%d name=%s result=SOLD buyer=%s price=%lld method=BUY_NOW",
@@ -476,7 +587,7 @@ void place_bid(int client_index, int item_id, long long price) {
         return;
     }
 
-    item->next_call_ms = now + BID_IDLE_MS;
+    item->deadline_ms = now + BID_IDLE_MS;
     item->calls_sent = 0;
     item->current_price = price;
     item->highest_bidder = client->user_index;
@@ -524,10 +635,19 @@ long long process_auction_timers(void) {
 
     for (int i = 0; i < MAX_ITEMS; i++) {
         AuctionItem *item = &items[i];
-        if (item->status != ITEM_AUCTIONING || item->next_call_ms == 0) {
+        if (item->deadline_ms == 0) {
             continue;
         }
-        if (item->next_call_ms <= now) {
+        if (item->deadline_ms <= now) {
+            if (item->status == ITEM_ENDED || item->highest_bidder < 0) {
+                int room_index = find_room_by_id(item->room_id);
+                if (room_index >= 0 && rooms[room_index].current_item_id == item->item_id) {
+                    stop_auction(room_index, item, -1,
+                                 item->status == ITEM_ENDED ? "NEXT_ITEM_TIMEOUT" : "NO_BIDS");
+                }
+                item->deadline_ms = 0;
+                continue;
+            }
             char message[256];
             int call = item->calls_sent++;
             snprintf(message, sizeof(message), "EVENT AUCTION_CALL %d %lld VND, %s (%d/3).\n",
@@ -535,7 +655,7 @@ long long process_auction_timers(void) {
             if (item->calls_sent == 3) {
                 /* Giu current_item_id de cho chu phong dung NEXT_ITEM. */
                 item->status = ITEM_ENDED;
-                item->next_call_ms = 0;
+                item->deadline_ms = now + AUCTION_STOP_MS;
                 broadcast_to_room(item->room_id, message, -1);
 
                 const char *winner = users[item->highest_bidder].username;
@@ -545,14 +665,15 @@ long long process_auction_timers(void) {
                 broadcast_to_room(item->room_id, message, -1);
                 log_event("AUCTION_ITEM_ENDED room_id=%d item_id=%d name=%s result=SOLD winner=%s price=%lld",
                           item->room_id, item->item_id, item->name, winner, item->current_price);
-                continue;
             }
-            broadcast_to_room(item->room_id, message, -1);
-            long long sent_at = monotonic_ms();
-            item->next_call_ms = (sent_at < 0 ? now : sent_at) + BID_CALL_INTERVAL_MS;
+            else {
+                broadcast_to_room(item->room_id, message, -1);
+                long long sent_at = monotonic_ms();
+                item->deadline_ms = (sent_at < 0 ? now : sent_at) + BID_CALL_INTERVAL_MS;
+            }
         }
-        if (next_deadline < 0 || item->next_call_ms < next_deadline) {
-            next_deadline = item->next_call_ms;
+        if (next_deadline < 0 || item->deadline_ms < next_deadline) {
+            next_deadline = item->deadline_ms;
         }
     }
     if (next_deadline < 0) {
