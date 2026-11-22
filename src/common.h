@@ -56,6 +56,7 @@ typedef struct {
     char room_name[ROOM_NAME_SIZE];
     char owner[USERNAME_SIZE];
     int member_count;
+    int current_item_id;  /* 0: phong chua co vat pham dang dau gia */
     int is_active;
 } AuctionRoom;
 

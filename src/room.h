@@ -10,5 +10,6 @@ void create_room(int client_index, const char *room_name);
 void list_rooms(int client_index);
 void join_room(int client_index, int room_id);
 void leave_room(int client_index);
+void broadcast_to_room(int room_id, const char *message, int except_client_index);
 
 #endif

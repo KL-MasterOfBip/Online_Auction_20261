@@ -95,6 +95,7 @@ void create_room(int client_index, const char *room_name) {
     snprintf(room->owner, sizeof(room->owner), "%s",
              users[client->user_index].username);
     room->member_count = 0;
+    room->current_item_id = 0;
     room->is_active = 1;
 
     log_event("ROOM_CREATED id=%d name=%s owner=%s",
@@ -185,4 +186,15 @@ void leave_room(int client_index) {
     log_event("ROOM_LEAVE username=%s fd=%d room_id=%d",
               username, client->socket_fd, old_room_id);
     send_message(client->socket_fd, "OK LEFT_ROOM\n");
+}
+
+void broadcast_to_room(int room_id, const char *message, int except_client_index) {
+    for (int i = 0; i < MAX_CLIENTS; i++) {
+        if (i == except_client_index || clients[i].socket_fd < 0) {
+            continue;
+        }
+        if (clients[i].current_room_id == room_id) {
+            send_message(clients[i].socket_fd, message);
+        }
+    }
 }
