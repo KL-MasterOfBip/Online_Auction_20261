@@ -15,5 +15,6 @@ void list_items(int client_index, int room_id);
 void remove_item(int client_index, int item_id);
 void start_auction(int client_index, int room_id);
 void next_item(int client_index, int room_id);
+void place_bid(int client_index, int item_id, long long price);
 
 #endif

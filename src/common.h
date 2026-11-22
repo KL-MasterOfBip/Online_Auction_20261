@@ -23,6 +23,7 @@
 #define MAX_ITEMS_PER_ROOM 20
 #define ITEM_NAME_SIZE 50
 #define MAX_PRICE 1000000000000LL
+#define MIN_BID_INCREMENT 10000LL
 
 typedef enum {
     INPUT_COMMAND,
@@ -79,6 +80,8 @@ typedef struct {
     char name[ITEM_NAME_SIZE];
     long long start_price;
     long long buy_now_price;
+    long long current_price;
+    int highest_bidder;   /* Chi so user, -1: chua co nguoi dat gia */
     ItemStatus status;
     int is_active;
 } AuctionItem;

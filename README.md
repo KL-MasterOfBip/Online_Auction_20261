@@ -426,3 +426,38 @@ Các chức năng nghiệp vụ của ứng dụng đấu giá sẽ được tri
 - Đặt giá và cập nhật trạng thái phiên đấu giá.
 - Mua ngay và bộ đếm 3 phút kèm thông báo.
 - Lưu trữ dữ liệu bền vững, unit test đạt coverage trên 90% và kiểm thử tải.
+
+
+## Đặt giá — mục 9
+
+Chạy `make` tại thư mục project, rồi chạy `./server` và `./client` ở hai terminal.
+Chủ phòng tạo vật phẩm và mở phiên bằng `START_AUCTION <room_id>` như trước.
+Người mua đăng nhập, `JOIN_ROOM <room_id>`, rồi nhập:
+
+```text
+BID <item_id> <price>
+```
+
+Ví dụ vật phẩm 1 có giá khởi điểm 100000:
+
+```text
+BID 1 109999
+ERROR Bid must be at least 110000
+BID 1 110000
+OK BID_ACCEPTED 1 PRICE 110000
+BID 1 119999
+ERROR Bid must be at least 120000
+```
+
+- Giá hiện tại bắt đầu bằng giá khởi điểm; mỗi giá mới phải tăng ít nhất 10000 đồng.
+- Giá là số nguyên dương, tối đa 1000000000000 đồng; không nhận dấu, phần thập phân hay ký hiệu khoa học.
+- Chỉ thành viên của phòng được đặt cho vật phẩm đang đấu giá của phòng đó.
+  Chủ phòng không được tự trả giá. ID vật phẩm được kiểm tra để tránh đặt nhầm khi chuyển phiên.
+- Giá hợp lệ cập nhật giá hiện tại và tài khoản đang dẫn đầu trong RAM, ghi log
+  `BID_ACCEPTED`; giá bị từ chối không làm thay đổi trạng thái.
+- Phản hồi chỉ gửi cho người đặt. Broadcast giá, timer, mua ngay và chốt người thắng
+  chưa triển khai. `NEXT_ITEM` bị chặn với `ERROR Cannot skip item with bids` nếu
+  vật phẩm đã có bid, tránh kết thúc sai thành `NO_SALE`; vật phẩm chưa có bid vẫn chuyển như cũ.
+- `LIST_ITEMS` vẫn có định dạng cũ (giá khởi điểm và giá mua ngay), chưa hiển thị giá hiện tại.
+
+Chạy kiểm thử đặt giá: `python3 tests/test_bids.py` (Python chuẩn, GCC, TCP localhost).

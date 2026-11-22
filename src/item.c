@@ -144,6 +144,8 @@ void add_item(int client_index,
     snprintf(item->name, sizeof(item->name), "%s", name);
     item->start_price = start_price;
     item->buy_now_price = buy_now_price;
+    item->current_price = start_price;
+    item->highest_bidder = -1;
     item->status = ITEM_PENDING;
     item->is_active = 1;
 
@@ -315,6 +317,12 @@ void next_item(int client_index, int room_id) {
         return;
     }
 
+    /* Chua co logic chot nguoi thang: khong ket thuc NO_SALE khi da co bid. */
+    if (items[current_index].highest_bidder >= 0) {
+        send_message(client->socket_fd, "ERROR Cannot skip item with bids\n");
+        return;
+    }
+
     char message[256];
 
     items[current_index].status = ITEM_ENDED;
@@ -349,4 +357,61 @@ void next_item(int client_index, int room_id) {
 
     snprintf(message, sizeof(message), "EVENT ITEM_STARTED %s\n", info);
     broadcast_to_room(room_id, message, client_index);
+}
+
+/* Server kiem tra gia va cap nhat trang thai trong cung vong lap select(). */
+void place_bid(int client_index, int item_id, long long price) {
+    Client *client = &clients[client_index];
+    int socket_fd = client->socket_fd;
+
+    if (client->user_index < 0) {
+        send_message(socket_fd, "ERROR Not logged in\n");
+        return;
+    }
+    if (price <= 0 || price > MAX_PRICE) {
+        send_message(socket_fd, "ERROR Invalid price\n");
+        return;
+    }
+    int item_index = find_item_by_id(item_id);
+    if (item_index < 0) {
+        send_message(socket_fd, "ERROR Item not found\n");
+        return;
+    }
+    AuctionItem *item = &items[item_index];
+    int room_index = find_room_by_id(item->room_id);
+    if (room_index < 0) {
+        send_message(socket_fd, "ERROR Room not found\n");
+        return;
+    }
+    if (client->current_room_id != item->room_id) {
+        send_message(socket_fd, "ERROR Not in item room\n");
+        return;
+    }
+    if (is_room_owner(client->user_index, room_index)) {
+        send_message(socket_fd, "ERROR Cannot bid on own item\n");
+        return;
+    }
+    if (item->status != ITEM_AUCTIONING ||
+        rooms[room_index].current_item_id != item_id) {
+        send_message(socket_fd, "ERROR Item is not being auctioned\n");
+        return;
+    }
+
+    /* Gia duoc gioi han boi MAX_PRICE nen phep cong khong tran long long. */
+    long long minimum = item->current_price + MIN_BID_INCREMENT;
+    if (price < minimum) {
+        char response[128];
+        snprintf(response, sizeof(response), "ERROR Bid must be at least %lld\n", minimum);
+        send_message(socket_fd, response);
+        return;
+    }
+
+    item->current_price = price;
+    item->highest_bidder = client->user_index;
+    log_event("BID_ACCEPTED item_id=%d room_id=%d username=%s price=%lld",
+              item_id, item->room_id, users[client->user_index].username, price);
+
+    char response[128];
+    snprintf(response, sizeof(response), "OK BID_ACCEPTED %d PRICE %lld\n", item_id, price);
+    send_message(socket_fd, response);
 }
