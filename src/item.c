@@ -348,7 +348,7 @@ void next_item(int client_index, int room_id) {
              current->item_id, current->name);
     send_message(client->socket_fd, message);
 
-    /* Vat pham da ban duoc cong bo khi het gio, khong phat lai ket qua. */
+    /* Vat pham da ban da duoc cong bo, khong phat lai ket qua. */
     if (current->status != ITEM_ENDED) {
         current->status = ITEM_ENDED;
         log_event("AUCTION_ITEM_ENDED room_id=%d item_id=%d name=%s result=NO_SALE",
@@ -378,6 +378,58 @@ void next_item(int client_index, int room_id) {
     broadcast_to_room(room_id, message, client_index);
 }
 
+/* Ca dat gia va mua ngay deu yeu cau nguoi mua o trong phong cua vat pham. */
+static AuctionItem *find_item_for_buyer(int client_index, int item_id,
+                                       const char *owner_error, int *room_index_out) {
+    Client *client = &clients[client_index];
+    int socket_fd = client->socket_fd;
+    int item_index = find_item_by_id(item_id);
+    if (item_index < 0) {
+        send_message(socket_fd, "ERROR Item not found\n");
+        return NULL;
+    }
+    AuctionItem *item = &items[item_index];
+    int room_index = find_room_by_id(item->room_id);
+    if (room_index < 0) {
+        send_message(socket_fd, "ERROR Room not found\n");
+        return NULL;
+    }
+    if (client->current_room_id != item->room_id) {
+        send_message(socket_fd, "ERROR Not in item room\n");
+        return NULL;
+    }
+    if (is_room_owner(client->user_index, room_index)) {
+        send_message(socket_fd, owner_error);
+        return NULL;
+    }
+    if (room_index_out != NULL) {
+        *room_index_out = room_index;
+    }
+    return item;
+}
+
+static void complete_buy_now(int client_index, AuctionItem *item) {
+    Client *client = &clients[client_index];
+    int socket_fd = client->socket_fd;
+    /* Chot giao dich truoc khi gui phan hoi va huy cac lan goi gia con lai. */
+    item->current_price = item->buy_now_price;
+    item->highest_bidder = client->user_index;
+    item->status = ITEM_ENDED;
+    item->next_call_ms = 0;
+    item->calls_sent = 0;
+    const char *buyer = users[client->user_index].username;
+    log_event("AUCTION_ITEM_ENDED room_id=%d item_id=%d name=%s result=SOLD buyer=%s price=%lld method=BUY_NOW",
+              item->room_id, item->item_id, item->name, buyer, item->buy_now_price);
+
+    char message[256];
+    snprintf(message, sizeof(message), "OK BUY_NOW %d PRICE %lld\n",
+             item->item_id, item->buy_now_price);
+    send_message(socket_fd, message);
+    snprintf(message, sizeof(message), "EVENT ITEM_SOLD %d %s bought it now for %lld VND.\n",
+             item->item_id, buyer, item->buy_now_price);
+    broadcast_to_room(item->room_id, message, client_index);
+}
+
 /* Server kiem tra gia va cap nhat trang thai trong cung vong lap select(). */
 void place_bid(int client_index, int item_id, long long price) {
     Client *client = &clients[client_index];
@@ -391,28 +443,21 @@ void place_bid(int client_index, int item_id, long long price) {
         send_message(socket_fd, "ERROR Invalid price\n");
         return;
     }
-    int item_index = find_item_by_id(item_id);
-    if (item_index < 0) {
-        send_message(socket_fd, "ERROR Item not found\n");
-        return;
-    }
-    AuctionItem *item = &items[item_index];
-    int room_index = find_room_by_id(item->room_id);
-    if (room_index < 0) {
-        send_message(socket_fd, "ERROR Room not found\n");
-        return;
-    }
-    if (client->current_room_id != item->room_id) {
-        send_message(socket_fd, "ERROR Not in item room\n");
-        return;
-    }
-    if (is_room_owner(client->user_index, room_index)) {
-        send_message(socket_fd, "ERROR Cannot bid on own item\n");
+    int room_index;
+    AuctionItem *item = find_item_for_buyer(client_index, item_id,
+                                           "ERROR Cannot bid on own item\n", &room_index);
+    if (item == NULL) {
         return;
     }
     if (item->status != ITEM_AUCTIONING ||
         rooms[room_index].current_item_id != item_id) {
         send_message(socket_fd, "ERROR Item is not being auctioned\n");
+        return;
+    }
+
+    /* Dung gia mua ngay thi chot luon, khong ap dung buoc gia BID. */
+    if (price == item->buy_now_price) {
+        complete_buy_now(client_index, item);
         return;
     }
 
@@ -447,6 +492,26 @@ void place_bid(int client_index, int item_id, long long price) {
     snprintf(event, sizeof(event), "EVENT BID_PLACED %d BIDDER %s PRICE %lld\n",
              item_id, users[client->user_index].username, item->current_price);
     broadcast_to_room(item->room_id, event, client_index);
+}
+
+void buy_now(int client_index, int item_id) {
+    Client *client = &clients[client_index];
+    int socket_fd = client->socket_fd;
+    if (client->user_index < 0) {
+        send_message(socket_fd, "ERROR Not logged in\n");
+        return;
+    }
+    AuctionItem *item = find_item_for_buyer(client_index, item_id,
+                                           "ERROR Cannot buy own item\n", NULL);
+    if (item == NULL) {
+        return;
+    }
+    if (item->status == ITEM_ENDED) {
+        send_message(socket_fd, "ERROR Item is no longer available\n");
+        return;
+    }
+
+    complete_buy_now(client_index, item);
 }
 
 long long process_auction_timers(void) {

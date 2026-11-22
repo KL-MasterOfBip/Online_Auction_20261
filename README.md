@@ -473,3 +473,23 @@ ERROR Bid must be at least 120000
 - `LIST_ITEMS` vẫn có định dạng cũ (giá khởi điểm và giá mua ngay), chưa hiển thị giá hiện tại.
 
 Chạy kiểm thử đặt giá: `python3 tests/test_bids.py` (Python chuẩn, GCC, TCP localhost).
+
+
+## Mua ngay — mục 12
+
+Sau khi đăng nhập và tham gia phòng, nhập `BUY_NOW <item_id>`. Dùng
+`LIST_ITEMS <room_id>` để xem ID và giá `BUYNOW` trước khi mua. Ví dụ:
+
+```text
+BUY_NOW 1
+OK BUY_NOW 1 PRICE 500000
+```
+
+Với vật phẩm đang đấu giá, `BID <item_id> <price>` bằng đúng giá `BUYNOW`
+cũng chốt mua ngay, kể cả khi phần chênh lệch dưới 10.000 đồng.
+
+Server dùng giá `BUYNOW` đã niêm yết cho vật phẩm. Thành viên khác trong phòng
+nhận `EVENT ITEM_SOLD 1 buyer bought it now for 500000 VND.` Chủ phòng không thể
+mua vật phẩm của mình. Thành viên có thể mua vật phẩm đang chờ hoặc đang đấu giá.
+Mua một vật phẩm đang chờ không ảnh hưởng phiên của vật phẩm khác. Nếu mua vật
+phẩm đang đấu giá, server dừng bộ đếm và chờ chủ phòng dùng `NEXT_ITEM <room_id>`.

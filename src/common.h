@@ -81,7 +81,7 @@ typedef struct {
     long long start_price;
     long long buy_now_price;
     long long current_price;
-    int highest_bidder;   /* Chi so user, -1: chua co nguoi dat gia */
+    int highest_bidder;   /* Chi so user dan dau hoac da mua, -1: chua co */
     long long next_call_ms;  /* 0: khong hen thong bao */
     int calls_sent;
     ItemStatus status;

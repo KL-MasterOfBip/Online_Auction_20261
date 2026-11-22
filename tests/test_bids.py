@@ -87,7 +87,7 @@ class BidTests(base.ServerTestCase):
             self.assertEqual(self.bid(price), 'ERROR Invalid price')
         self.accepted(110000)
 
-    def test_maximum_price_cannot_overflow_or_wrap(self):
+    def test_bid_at_maximum_buy_now_price_completes_sale(self):
         item = self.add_item(self.owner, self.room, 'Expensive', 999999990000, 1000000000000)
         self.start()
         self.owner.send(f'NEXT_ITEM {self.room}')
@@ -95,10 +95,28 @@ class BidTests(base.ServerTestCase):
         self.owner.read_line()
         self.buyer.read_line()
         self.buyer.read_line()
-        self.accepted(1000000000000, item=item)
+        self.assertEqual(self.bid(1000000000001, item=item), 'ERROR Invalid price')
         self.assertEqual(self.bid(1000000000000, item=item),
-                         'ERROR Bid must be at least 1000000010000')
-        self.assertEqual(self.bid('1000000010000', item=item), 'ERROR Invalid price')
+                         f'OK BUY_NOW {item} PRICE 1000000000000')
+        self.assertEqual(self.bid(1000000000000, item=item),
+                         'ERROR Item is not being auctioned')
+
+    def test_bid_at_buy_now_price_closes_auction_even_below_minimum_increment(self):
+        self.start()
+        self.owner.cmd(f'JOIN_ROOM {self.room}')
+        self.accepted(495000)
+        self.assertEqual(self.owner.read_line(), self.event('buyer', 495000))
+        self.assertEqual(self.bid(499999), 'ERROR Bid must be at least 505000')
+        self.assertEqual(self.bid(500000), f'OK BUY_NOW {self.item} PRICE 500000')
+        self.assertEqual(self.owner.read_line(),
+                         f'EVENT ITEM_SOLD {self.item} buyer bought it now for 500000 VND.')
+        self.assertFalse(self.owner.has_data(.5))
+        self.assertEqual(self.bid(510000), 'ERROR Item is not being auctioned')
+        self.assertEqual(self.buyer.cmd(f'BUY_NOW {self.item}'), 'ERROR Item is no longer available')
+        self.assertEqual(self.owner.cmd(f'NEXT_ITEM {self.room}'), f'OK ITEM_ENDED {self.item} Laptop')
+        self.assertEqual(self.owner.read_line(), 'OK AUCTION_FINISHED')
+        self.assertEqual(self.buyer.read_line(), 'EVENT AUCTION_FINISHED')
+        self.assertEqual(self.read_log().count('method=BUY_NOW'), 1)
 
     def test_two_clients_compete_against_latest_price(self):
         other = self.make_user('other')
